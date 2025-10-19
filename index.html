@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Adressen nach Entfernung sortieren</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      direction: ltr;
+      text-align: center;
+      margin: 20px;
+      background: #f7f7f7;
+    }
+    h2 {
+      color: #333;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      cursor: pointer;
+      background: #4CAF50;
+      color: white;
+      border: none;
+    }
+
+
+
+
+
+    
+    tr:hover {
+  background: #d3ffd3 !important;
+  cursor: pointer;
+}
+
+
+
+
+
+    table {
+      width: 90%;
+      margin: 20px auto;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 12px;
+      border: 1px solid #ddd;
+    }
+    th {
+      background: #4CAF50;
+      color: white;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+    }
+    li {
+      background: #fff;
+      margin: 5px auto;
+      padding: 8px;
+      width: 70%;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    #reportPreview {
+      display: block;
+      background: url("images/-heilbronn-startseite-uebersicht-1.webp") no-repeat center center;
+      background-size: contain;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      max-width: 850px;
+      margin: auto;
+      min-height: 1123px;
+  }
+  </style>
+</head>
+<body>
+    <div class="image-box">
+        <a href="https://www.adragna-wohndesign.de/#raum-umgebung.html" target="_blank">
+          <img src="images/heilbronn-fliesenleger-fliesenreinigung-logo.jpeg" alt="Mein Logo"/>
+        </a>
+
+        <a href="https://www.adragna-wohndesign.de/#raum-umgebung.html" target="_blank">
+          <img src="images/heilbronn-fliesenleger-fliesenreinigung-logo-text.jpeg" alt="Mein Logo"/>
+        </a>
+
+  </div>
+
+  <h2 >Adressen <b style="color: black;">von</b> der nächsten <b style="color: black;">bis</b> zur weitesten Entfernung</h2>
+
+  <div>
+    <input type="text" id="streetInput" placeholder="Straße und Hausnummer">
+    <input type="text" id="zipInput" placeholder="Postleitzahl">
+    <button onclick="addAddress()">Adresse hinzufügen</button>
+    <button onclick="processAddresses()">Sortierung anzeigen</button>
+  </div>
+
+  <ul id="addressList"></ul>
+
+  <table id="resultTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Adresse</th>
+        <th>Stadt</th>
+        <th>Entfernung vom Nutzer (km)</th>
+        <th>Entfernung von vorheriger Adresse (km)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="reportPreview"></div>
+
+  <script>
+    let userLocation = null;
+    let addresses = [];
+
+    // Standort automatisch vom Browser holen
+    navigator.geolocation.getCurrentPosition(pos => {
+      userLocation = {
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude
+      };
+    }, err => {
+      alert("Bitte aktiviere den Standort (GPS) im Browser.");
+    });
+
+    // Adresse hinzufügen
+    async function addAddress() {
+      const street = document.getElementById("streetInput").value.trim();
+      const zip = document.getElementById("zipInput").value.trim();
+
+      if (street && zip) {
+        const fullAddress = `${street}, ${zip}, Germany`;
+        const coords = await geocodeAddress(fullAddress);
+        if (coords) {
+          const confirmMsg = `Meintest du diese Adresse?\n${coords.display_name}`;
+          if (confirm(confirmMsg)) {
+            addresses.push(coords);
+            const li = document.createElement("li");
+            li.textContent = coords.display_name;
+            document.getElementById("addressList").appendChild(li);
+          } else {
+            alert("Bitte korrigiere die Adresse und versuche erneut.");
+          }
+        }
+        document.getElementById("streetInput").value = "";
+        document.getElementById("zipInput").value = "";
+      } else {
+        alert("Bitte Straße + Hausnummer und Postleitzahl eingeben.");
+      }
+    }
+
+    // Adressen sortieren und Tabelle anzeigen
+    async function processAddresses() {
+      if (!userLocation) {
+        alert("Dein Standort ist noch nicht bestimmt.");
+        return;
+      }
+      if (addresses.length === 0) {
+        alert("Bitte mindestens eine Adresse eingeben.");
+        return;
+      }
+
+      let results = addresses.map(addr => ({
+        address: addr.display_name,
+        city: addr.city || addr.town || addr.village || "Unbekannt",
+        distance: parseFloat(haversine(userLocation.lat, userLocation.lon, addr.lat, addr.lon))
+      }));
+
+      results.sort((a, b) => a.distance - b.distance);
+
+      displayResults(results);
+    }
+
+    // Nominatim API für Geocoding
+    async function geocodeAddress(address) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(address)}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data && data.length > 0) {
+          const item = data[0];
+          return {
+            lat: parseFloat(item.lat),
+            lon: parseFloat(item.lon),
+            display_name: item.display_name,
+            city: item.address.city || item.address.town || item.address.village
+          };
+        } else {
+          alert("Adresse nicht gefunden: " + address);
+          return null;
+        }
+      } catch (err) {
+        alert("Fehler beim Abrufen der Adresse: " + address);
+        return null;
+      }
+    }
+
+    // Haversine Formel für Entfernungen
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    // Ergebnisse in Tabelle anzeigen
+    function displayResults(results) {
+      const table = document.getElementById("resultTable");
+      const tbody = table.querySelector("tbody");
+      tbody.innerHTML = "";
+
+      const maxDistance = Math.max(...results.map(r => r.distance));
+
+      for (let i = 0; i < results.length; i++) {
+        const prevDistance = i === 0 ? '-' : (results[i].distance - results[i-1].distance).toFixed(2);
+
+        const row = document.createElement("tr");
+
+        // Hintergrundfarbe nach Entfernung (grün → nah, rot → weit)
+        const ratio = results[i].distance / maxDistance;
+        const red = Math.floor(255 * ratio);
+        const green = Math.floor(255 * (1 - ratio));
+        row.style.backgroundColor = `rgb(${red},${green},0)`;
+
+        row.innerHTML = `<td>${results[i].address}</td>
+                         <td>${results[i].city}</td>
+                         <td>${results[i].distance.toFixed(2)}</td>
+                         <td>${prevDistance}</td>`;
+        tbody.appendChild(row);
+      }
+      table.style.display = "table";
+    }
+
+    row.addEventListener("click", () => {
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(res.address)}`;
+  window.open(url, "_blank");
+
+  navigator.clipboard.writeText(res.address).then(() => {
+    alert("📍 العنوان تم نسخه! يمكنك لصقه مباشرة.");
+  });
+});
+
+  </script>
+</body>
+</html>
