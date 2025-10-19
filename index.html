@@ -80,6 +80,9 @@
       min-height: 1123px;
   }
   </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 </head>
 <body>
     <div class="image-box">
@@ -115,6 +118,11 @@
     </thead>
     <tbody></tbody>
   </table>
+
+
+ <div id="map" style="height: 500px; width: 90%; margin: 20px auto; border-radius: 12px; overflow: hidden;"></div>
+  
+
 
   <div id="reportPreview"></div>
 
@@ -179,6 +187,29 @@
 
       displayResults(results);
     }
+        // عرض الخريطة بعد عرض النتائج
+showMap(results);
+
+function showMap(results) {
+  if (!userLocation) return;
+
+  const map = L.map("map").setView([userLocation.lat, userLocation.lon], 11);
+
+  // طبقة الخريطة الأساسية
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  // موقع المستخدم
+  const userMarker = L.marker([userLocation.lat, userLocation.lon]).addTo(map);
+  userMarker.bindPopup("📍 موقعك الحالي").openPopup();
+
+  // عناوين الإدخال
+  results.forEach((res, i) => {
+    const marker = L.marker([addresses[i].lat, addresses[i].lon]).addTo(map);
+    marker.bindPopup(`${res.address}<br>📏 ${res.distance.toFixed(2)} km`);
+  });
+}
 
     // Nominatim API für Geocoding
     async function geocodeAddress(address) {
@@ -216,40 +247,49 @@
 
     // Ergebnisse in Tabelle anzeigen
     function displayResults(results) {
-      const table = document.getElementById("resultTable");
-      const tbody = table.querySelector("tbody");
-      tbody.innerHTML = "";
+  const table = document.getElementById("resultTable");
+  const tbody = table.querySelector("tbody");
+  tbody.innerHTML = "";
 
-      const maxDistance = Math.max(...results.map(r => r.distance));
+  const maxDistance = Math.max(...results.map(r => r.distance));
 
-      for (let i = 0; i < results.length; i++) {
-        const prevDistance = i === 0 ? '-' : (results[i].distance - results[i-1].distance).toFixed(2);
+  for (let i = 0; i < results.length; i++) {
+    const res = results[i];
+    const prevDistance = i === 0 ? '-' : (results[i].distance - results[i - 1].distance).toFixed(2);
 
-        const row = document.createElement("tr");
+    const row = document.createElement("tr");
 
-        // Hintergrundfarbe nach Entfernung (grün → nah, rot → weit)
-        const ratio = results[i].distance / maxDistance;
-        const red = Math.floor(255 * ratio);
-        const green = Math.floor(255 * (1 - ratio));
-        row.style.backgroundColor = `rgb(${red},${green},0)`;
+    // لون الصف حسب المسافة (أخضر قريب - أحمر بعيد)
+    const ratio = res.distance / maxDistance;
+    const red = Math.floor(255 * ratio);
+    const green = Math.floor(255 * (1 - ratio));
+    row.style.backgroundColor = `rgb(${red},${green},0)`;
 
-        row.innerHTML = `<td>${results[i].address}</td>
-                         <td>${results[i].city}</td>
-                         <td>${results[i].distance.toFixed(2)}</td>
-                         <td>${prevDistance}</td>`;
-        tbody.appendChild(row);
-      }
-      table.style.display = "table";
-    }
+    row.innerHTML = `
+      <td>${res.address}</td>
+      <td>${res.city}</td>
+      <td>${res.distance.toFixed(2)}</td>
+      <td>${prevDistance}</td>
+    `;
 
+    // 🟢 عند الضغط على الصف، افتح الخريطة وانسخ العنوان
     row.addEventListener("click", () => {
-  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(res.address)}`;
-  window.open(url, "_blank");
+      const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(res.address)}`;
+      window.open(url, "_blank");
 
-  navigator.clipboard.writeText(res.address).then(() => {
-    alert("📍 العنوان تم نسخه! يمكنك لصقه مباشرة.");
-  });
-});
+      navigator.clipboard.writeText(res.address).then(() => {
+        alert("📍 العنوان تم نسخه! يمكنك لصقه مباشرة.");
+      });
+    });
+
+    tbody.appendChild(row);
+  }
+
+  table.style.display = "table";
+
+  // عرض الخريطة بعد النتائج
+  showMap(results);
+}
 
   </script>
 </body>
